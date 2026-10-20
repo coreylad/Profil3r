@@ -105,3 +105,59 @@ class Core:
                     self.results[name] = {"accounts": [], "error": str(exc)}
                 self.print_results(name)
         return self.generate_report()
+
+
+# Curated identifiers, not a guess based on generic words in breach descriptions.
+_ADULT_BREACH_IDENTIFIERS = {
+    "adultfriendfinder", "ashleymadison", "brazzers", "youporn",
+    "pornhub", "xhamster", "fling", "cam4",
+}
+
+
+def check_self_email_exposure(address, api_key):
+    """Query HIBP's documented breached-account endpoint for a self-supplied address.
+
+    Results are breach associations, not proof of a current or historical account.
+    Sensitive breaches may be withheld by the upstream API.
+    """
+    from urllib.error import HTTPError, URLError
+    from urllib.parse import quote
+    from urllib.request import Request, urlopen
+
+    if not address or "@" not in address or address.count("@") != 1:
+        raise ValueError("Provide a valid email address")
+    if not api_key:
+        raise ValueError("HIBP_API_KEY is required")
+    url = "https://haveibeenpwned.com/api/v3/breachedaccount/" + quote(address.strip(), safe="")
+    request = Request(url + "?truncateResponse=false", headers={
+        "hibp-api-key": api_key,
+        "user-agent": "Profil3r-self-email-exposure/1.1",
+        "accept": "application/json",
+    })
+    try:
+        with urlopen(request, timeout=15) as response:
+            breaches = json.load(response)
+    except HTTPError as exc:
+        if exc.code == 404:
+            return []
+        if exc.code in (401, 403):
+            raise RuntimeError("HIBP denied access; verify API key and account permissions") from exc
+        if exc.code == 429:
+            raise RuntimeError("HIBP rate limit reached; retry later") from exc
+        raise RuntimeError("HIBP returned HTTP {}".format(exc.code)) from exc
+    except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+        raise RuntimeError("Could not complete HIBP request") from exc
+    matches = []
+    for breach in breaches:
+        name = str(breach.get("Name", ""))
+        domain = str(breach.get("Domain", ""))
+        normalized = "".join(char for char in (name + domain).lower() if char.isalnum())
+        if any(identifier in normalized for identifier in _ADULT_BREACH_IDENTIFIERS):
+            matches.append({
+                "name": name,
+                "domain": domain,
+                "breach_date": breach.get("BreachDate", "unknown"),
+                "source": "Have I Been Pwned",
+                "status": "breach_association_not_account_confirmation",
+            })
+    return matches
