@@ -39,6 +39,10 @@ A report in JSON format is automatically generated in the `reports` folder
 python3 profil3r john doe
 ```
 
+Run these commands from the repository root (where `config.json` is located).
+You can also use `python3 -m profil3r john doe` or the legacy
+`python3 profil3r.py john doe` entry point.
+
 ## 📝 License
 
 This project is under the MIT license.
