@@ -10,9 +10,9 @@ Profil3r is an [OSINT](https://en.wikipedia.org/wiki/Open-source_intelligence) t
 
 ## 🛠️ Installation
 ```bash
-git clone https://github.com/Rog3rSm1th/Profil3r.git
+git clone https://github.com/coreylad/Profil3r.git
 cd Profil3r/
-python3 setup.py install
+python3 -m pip install .
 ```
 ## Features
 
