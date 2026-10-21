@@ -48,6 +48,32 @@ def inspect_email(value, breach_check=False):
     return findings
 
 
+def inspect_domain(value):
+    """Inspect public DNS posture without attempting mailbox discovery."""
+    import dns.resolver
+    domain = value.strip().lower().rstrip(".")
+    if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\\.[a-z]{2,}", domain):
+        raise ValueError("Invalid domain")
+    findings = []
+    for record_type, hostname in (("MX", domain), ("TXT", domain), ("TXT", "_dmarc." + domain)):
+        try:
+            records = [str(record).strip(\'"\') for record in dns.resolver.resolve(hostname, record_type, lifetime=5)]
+            if record_type == "TXT" and hostname == domain:
+                records = [record for record in records if record.lower().startswith("v=spf1")]
+                kind = "spf"
+            elif hostname.startswith("_dmarc."):
+                records = [record for record in records if record.lower().startswith("v=dmarc1")]
+                kind = "dmarc"
+            else:
+                kind = "mx"
+            findings.append({"type": "domain_" + kind, "value": hostname,
+                             "status": "record_found" if records else "not_found", "records": records})
+        except (dns.exception.DNSException, OSError) as exc:
+            findings.append({"type": "domain_" + ("dmarc" if hostname.startswith("_dmarc.") else record_type.lower()),
+                             "value": hostname, "status": "unverified", "detail": type(exc).__name__})
+    return findings
+
+
 def inspect_phone(value, region="US"):
     try:
         import phonenumbers
@@ -128,6 +154,7 @@ def main(argv=None):
     target.add_argument("--email", help="Email syntax and domain MX; does not enumerate accounts")
     target.add_argument("--username", help="One or more comma-separated public usernames")
     target.add_argument("--phone", help="Phone number to parse and inspect")
+    target.add_argument("--domain", help="Public MX, SPF and DMARC records for a domain")
     target.add_argument("--interactive", action="store_true", help="Step-by-step guided menu")
     parser.add_argument("--region", default="US", help="Default region for national phone numbers (e.g. GB, US)")
     parser.add_argument("--mailaccess", action="store_true", help="Run optional upstream MailAccess email investigation (install separately)")
@@ -142,11 +169,11 @@ def main(argv=None):
     if (args.breaches or args.mailaccess) and not args.email:
         parser.error("--breaches and --mailaccess require --email")
     try:
-        if args.interactive or not any((args.email, args.username, args.phone)):
+        if args.interactive or not any((args.email, args.username, args.phone, args.domain)):
             mode, value, breach = wizard()
         else:
-            mode = "email" if args.email else "username" if args.username else "phone"
-            value = args.email or args.username or args.phone
+            mode = "email" if args.email else "username" if args.username else "phone" if args.phone else "domain"
+            value = args.email or args.username or args.phone or args.domain
             breach = args.breaches
         if mode == "email":
             findings = inspect_email(value, breach)
@@ -154,8 +181,10 @@ def main(argv=None):
                 findings.append(investigate_with_mailaccess(value))
         elif mode == "username":
             findings = inspect_usernames(value.split(","), args.sites, args.workers)
-        else:
+        elif mode == "phone":
             findings = inspect_phone(value, args.region)
+        else:
+            findings = inspect_domain(value)
         print("\nResults:")
         for item in findings:
             print("  {}: {} ({})".format(item.get("type", "finding"),
