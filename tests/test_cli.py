@@ -43,13 +43,18 @@ class CliTests(unittest.TestCase):
                 self.assertIn("usage:", output.lower())
                 self.assertIn("--self-email", output)
 
-    def test_directory_entry_point_adds_package_parent_to_search_path(self):
+    def test_directory_entry_point_works_without_repo_root_on_search_path(self):
+        # The installed package should be importable without modifying sys.path.
+        # unittest discover normally puts the tests directory at sys.path[0].
         with patch.object(sys, "path", [
             path for path in sys.path
             if path and Path(path).resolve() != ROOT
         ]):
-            self.run_cli("profil3r", [])
-            self.assertEqual(sys.path[0], str(ROOT))
+            original_path = list(sys.path)
+            core, output = self.run_cli("profil3r", [])
+            core.Core.assert_not_called()
+            self.assertIn("usage:", output.lower())
+            self.assertEqual(sys.path, original_path)
 
     def test_custom_options_forwarded(self):
         for entry_point in ("profil3r", "profil3r.py", "-m"):
