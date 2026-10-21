@@ -6,9 +6,15 @@ from pathlib import Path
 from profil3r.core import Core, check_self_email_exposure
 from profil3r.public_profiles import load_sites, scan_public_profiles
 import json
+import sys
 
 
 def main(argv=None):
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv and argv[0] in ("suite", "wizard"):
+        from profil3r.suite import main as suite_main
+        return suite_main(["--interactive"] + argv[1:] if argv[0] == "wizard" else argv[1:])
     parser = argparse.ArgumentParser(description="Public-profile discovery and opt-in email breach checks")
     parser.add_argument("names", nargs="*", help="Name components to search")
     parser.add_argument("--config", type=Path, default=Path(__file__).resolve().parent.parent / "config.json")
