@@ -51,26 +51,27 @@ def inspect_email(value, breach_check=False):
 def inspect_domain(value):
     """Inspect public DNS posture without attempting mailbox discovery."""
     import dns.resolver
+    import dns.exception
     domain = value.strip().lower().rstrip(".")
-    if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\\.[a-z]{2,}", domain):
+    if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}", domain):
         raise ValueError("Invalid domain")
     findings = []
-    for record_type, hostname in (("MX", domain), ("TXT", domain), ("TXT", "_dmarc." + domain)):
+    for kind, hostname, record_type in (
+        ("mx", domain, "MX"),
+        ("spf", domain, "TXT"),
+        ("dmarc", "_dmarc." + domain, "TXT"),
+    ):
         try:
-            records = [str(record).strip(\'"\') for record in dns.resolver.resolve(hostname, record_type, lifetime=5)]
-            if record_type == "TXT" and hostname == domain:
+            records = [record.to_text().strip('"') for record in dns.resolver.resolve(hostname, record_type, lifetime=5)]
+            if kind == "spf":
                 records = [record for record in records if record.lower().startswith("v=spf1")]
-                kind = "spf"
-            elif hostname.startswith("_dmarc."):
+            if kind == "dmarc":
                 records = [record for record in records if record.lower().startswith("v=dmarc1")]
-                kind = "dmarc"
-            else:
-                kind = "mx"
             findings.append({"type": "domain_" + kind, "value": hostname,
                              "status": "record_found" if records else "not_found", "records": records})
         except (dns.exception.DNSException, OSError) as exc:
-            findings.append({"type": "domain_" + ("dmarc" if hostname.startswith("_dmarc.") else record_type.lower()),
-                             "value": hostname, "status": "unverified", "detail": type(exc).__name__})
+            findings.append({"type": "domain_" + kind, "value": hostname,
+                             "status": "unverified", "detail": type(exc).__name__})
     return findings
 
 
