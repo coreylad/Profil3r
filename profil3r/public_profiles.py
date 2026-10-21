@@ -30,7 +30,7 @@ def check_profile(username, name, site, timeout=8):
         )
     except requests.RequestException as exc:
         return {"site": name, "url": url, "status": "error", "detail": type(exc).__name__}
-    if response.status_code == 404:
+    if response.status_code == 404 or (site.get("missing_status") is not None and response.status_code == site["missing_status"] and site.get("expected_status") != response.status_code):
         status = "not_found"
     elif response.status_code != 200:
         status = "unknown"
@@ -40,7 +40,7 @@ def check_profile(username, name, site, timeout=8):
         negative = [term for term in site.get("not_found_text", []) if term.lower() in body]
         if negative:
             status = "not_found"
-        elif positive:
+        elif positive and (site.get("expected_status") is None or response.status_code == site["expected_status"]):
             status = "possible_match"
         else:
             status = "unknown"
@@ -59,3 +59,43 @@ def scan_public_profiles(usernames, sites, workers=4):
             for username in usernames for name, site in sites.items()
         ]
         return [future.result() for future in as_completed(futures)]
+
+
+def load_mailaccess_username_sites(path=None, include_disabled=False):
+    """Load locally bundled MailAccess username definitions.
+
+    Only public GET/HEAD username URLs are runnable by the basic scanner.
+    Email-existence definitions remain available in the bundled JSON but
+    are not automatically probed.
+    """
+    corpus_path = Path(path) if path else Path(__file__).resolve().parent / "mailaccess_sites.json"
+    with corpus_path.open(encoding="utf-8") as handle:
+        corpus = json.load(handle)
+    result = {}
+    for identifier, definition in corpus["sites"].items():
+        if definition.get("check_type") != "username-url":
+            continue
+        if definition.get("disabled") and not include_disabled:
+            continue
+        if str(definition.get("requestMethod", "GET")).upper() not in ("GET", "HEAD"):
+            continue
+        if definition.get("requestPayload") or definition.get("handler"):
+            continue
+        url = definition.get("uri_check") or definition.get("url") or ""
+        if not url.startswith("https://") or "{username}" not in url:
+            continue
+        positive = definition.get("e_string")
+        negative = definition.get("m_string")
+        if not positive and not negative:
+            continue
+        result[identifier] = {
+            "url": url,
+            "profile_url": definition.get("url", url),
+            "category": definition.get("category", "other"),
+            "adult": "nsfw" in definition.get("tags", []) or "NSFW" in str(definition.get("category", "")),
+            "check_text": [positive] if positive else [],
+            "not_found_text": [negative] if negative else [],
+            "expected_status": definition.get("e_code"),
+            "missing_status": definition.get("m_code"),
+        }
+    return result
