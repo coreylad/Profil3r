@@ -1,13 +1,11 @@
 # Profil3r — OSINT Toolkit
 
-Profil3r is a command-line OSINT toolkit for examining user-provided email addresses,
-public usernames and telephone numbering metadata. **A public profile match does not
-establish identity, and a breach association does not establish a current account.**
+Profil3r examines supplied email addresses, public usernames, domains and telephone
+numbering metadata. A profile match is a lead, not proof of identity or account ownership.
 
-## Install
+## Install or update
 
-Python 3.9+ is required. On Ubuntu/Debian, use a virtual environment to avoid
-the externally-managed Python installation restriction:
+Python 3.9+ is required. Use a virtual environment on Ubuntu/Debian:
 
 ```bash
 git clone https://github.com/coreylad/Profil3r.git
@@ -18,97 +16,117 @@ source .venv/bin/activate
 python -m pip install .
 ```
 
-## Full name scan and adult profiles
-
-The regular `profil3r john doe` scan now includes public adult-profile
-checks automatically alongside the existing social and email modules.
-It records `possible_match`, `not_found`, `unknown` and `error` outcomes
-without treating an HTTP 200 response as evidence of an account.
-The starter adult list still contains only two unverified sites; expanding
-and validating that coverage remains open work.
-
-## MailAccess integration
-
-MailAccess is an independent MIT-licensed project. Profil3r can run its
-upstream email investigation with `--mailaccess`, preserving its JSON report
-instead of inaccurately claiming to reimplement all of its platform rules.
-Install MailAccess separately in the same virtual environment:
+For an existing checkout on that branch:
 
 ```bash
-python -m pip install mailaccess
-profil3r suite --email "me@example.com" --mailaccess
+git pull --ff-only
+python -m pip install --upgrade .
 ```
 
-MailAccess advertises a 5,300+ platform corpus, but its default investigation
-runs a bounded set of approximately 700 platforms. This integration **does not
-scan all 5,300+ sites**. Upstream account-existence techniques may differ from
-Profil3r public-profile checks; use only with authorization.
+## Native MailAccess definitions
 
-## Guided menu
+The complete bundled [MailAccess](https://github.com/KatrielMoses/MailAccess)
+corpus contains **5,360 definitions** (the upstream metadata's 5,365 count is stale).
+Profil3r runs these definitions directly. No MailAccess installation, CLI or subprocess
+is required. The upstream MIT attribution is retained in `MAILACCESS-LICENSE`.
+
+| Definition type | Total | Enabled upstream | Disabled upstream |
+| --- | ---: | ---: | ---: |
+| Username URL | 5,100 | 4,510 | 590 |
+| Email existence | 260 | 214 | 46 |
+
+Username scans include adult sites automatically: 59 adult username definitions,
+53 enabled upstream. Disabled sites remain in reports as `skipped`, with reasons.
+These are definition counts, not a claim that every live website currently works.
+Username format restrictions may skip additional sites for a particular handle.
+
+The native engine handles HTTP status rules, presence/absence messages, response-URL
+rules, paired existence/absence markers, GET/HEAD/POST, form/JSON bodies, custom headers,
+username regular expressions and character stripping, and session bootstrap cookies,
+CSRF fields and named regex tokens. Native handlers cover the corpus's control-email,
+Office365, Adobe, OK.ru and OkCupid flows. Unexpected provider responses stay inconclusive.
+Rate limits, blocked pages and conflicting signals never become confirmed accounts.
+
+## Run scans
 
 ```bash
-profil3r suite --interactive
-# or
+# Email syntax, MX and native email-site definitions
+profil3r suite --email "me@example.com"
+
+# A single positional email also routes to email mode, never username URLs
+profil3r "me@example.com"
+
+# Every bundled username definition, including adult profiles
+profil3r suite --username "exampleuser,example_user" --workers 8
+
+# Standard name permutations also use the bundled username corpus
+profil3r john doe
+
+# All bundled adult username definitions only
+profil3r --adult-usernames "exampleuser"
+
+# Recovery flows are opt-in because providers may send notifications
+profil3r suite --email "me@example.com" --include-recovery
+
+# Email syntax and MX only
+profil3r suite --email "me@example.com" --dns-only
+
+# Public MX, SPF and DMARC
+profil3r suite --domain example.com
+
+# Phone metadata, not subscriber identity
+profil3r suite --phone "+442071838750" --region GB
+
+# CSV includes skipped, unknown, error and rate-limit outcomes
+profil3r suite --username "exampleuser" --format csv --output reports/usernames.csv
+
+# Guided menu
 profil3r wizard
 ```
 
-The menu guides you through choosing email, username or phone checks, entering
-an identifier and writing a report.
+`--mailaccess` remains a compatibility alias for native email checks. It no longer
+launches the upstream program. `--timeout` sets the per-request timeout (default
+8 seconds, maximum 120); `--workers` accepts 1–16 concurrent probes. A scan of thousands
+of sites can take a long time. There is no implicit 334-site or 700-site limit.
 
-## Command-line examples
+The name scan runs at most 50 generated handles and reports the number of omitted
+permutations. Explicit username scans accept at most 50 distinct handles. Email addresses
+are rejected in username mode; the tool never assumes an email's local part is a handle.
+
+OnlyFans requires an explicit public handle. Its native check requires a matching
+profile JSON object; a generic HTTP 200 or frontend page is not account evidence.
+OnlyFans signing rules and bot protections can expire or block the bundled endpoint;
+those responses are reported as unknown/error rather than fabricated profile matches.
+
+Suite reports default to `reports/osint.json`, overwritten by the next run. Use
+`--output` for separate reports. JSON and CSV retain site identifiers, status, reason,
+adult/category labels and whether a request was attempted. Status-code and absence-only
+rules can produce false positives; every positive is labeled `possible_match`.
+
+## Custom public profile definitions
+
+`--sites custom.json` accepts the original `websites` mapping, with HTTPS URLs containing
+`{username}` and `check_text` / `not_found_text` arrays. The bundled corpus lives in
+`profil3r/mailaccess_sites.json` and uses the native MailAccess schema. These are separate
+formats. `--adult-sites custom.json` overrides the adult-only selection with custom sites.
+
+## Optional breach checks
 
 ```bash
-# Email syntax and public mail-domain records (no mailbox enumeration)
-profil3r suite --email "me@example.com"
-
-# Optional adult-platform breach associations for your OWN email
 export HIBP_API_KEY="your-api-key"
 profil3r suite --email "me@example.com" --breaches
-
-# Public profile username checks
-profil3r suite --username "exampleuser,example_user"
-
-# Phone numbering plan, country, carrier/geography hints (not owner lookup)
-profil3r suite --phone "+442071838750" --region GB
-
-# CSV output
-profil3r suite --username "exampleuser" --format csv --output reports/usernames.csv
-
-# Previous name-based workflow remains available
-profil3r john doe
 ```
 
-The suite defaults to `reports/osint.json` (overwritten on the next run).
-Use `--output` to preserve each investigation. **Reports may contain sensitive
-identifiers: store them securely and do not commit them to Git.**
+HIBP results are breach associations, not account confirmation. Sensitive breaches may
+be withheld by the provider. Phone metadata cannot identify a subscriber or live location.
+Use identifiers you own or are authorized to assess; keep reports out of source control.
 
-## Public profile definitions
-
-Site definitions live in `profil3r/public_adult_sites.json`.
-Each site provides an HTTPS public profile URL containing `{username}`,
-plus optional `check_text` and `not_found_text` arrays.
-You can provide a custom definition file with `--sites my_sites.json`.
-Current starter definitions cover Pornhub and OnlyFans; site-specific positive
-indicators have not been verified. HTTP 200 alone is **never** a match.
-
-## Important limitations
-
-- The tool does not query private account registration or password-reset endpoints.
-- Email checks do not establish whether an inbox exists. HIBP requires an API key,
-  and sensitive breaches may be omitted by the provider.
-- Phone metadata does not establish subscriber identity, live location or current
-  carrier; portability can make carrier hints inaccurate.
-- Public profile results are leads, not confirmed identity matches.
-- Network checks can fail due to blocking, rate limits, or website changes.
-- Run checks only for purposes you are authorized to investigate.
-
-## Tests
+## Validation
 
 ```bash
-python -m unittest discover -s tests
+python -m compileall -q profil3r
+python -m unittest discover -s tests -v
 ```
 
-## Development status
-
-The development branch is a work in progress; tests and live site rules require
-validation before merging. The original project is MIT licensed.
+Tests mock network responses, including a full-corpus dispatch check. They verify schema
+integration and failure handling, not current live availability of every provider.

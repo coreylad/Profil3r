@@ -1,42 +1,26 @@
-import requests
-from profil3r.colors import Colors
-import time
+"""Public OnlyFans handle checks; an email address is never a profile handle."""
+import re
+from urllib.parse import quote
+
+from profil3r.site_probe import load_definitions, scan_definitions
+
 
 class Onlyfans:
-
     def __init__(self, config, permutations_list):
-        # 1000 ms
-        self.delay = config['plateform']['onlyfans']['rate_limit'] / 1000
-        # https://onlyfans.com/{username}
-        self.format = config['plateform']['onlyfans']['format']
-        # onlyfans usernames are not case sensitive
-        self.permutations_list = [perm.lower() for perm in permutations_list]
+        # Do not guess a handle from an email local part or use a configurable
+        # URL template to turn an arbitrary identifier into a reported account.
+        self.permutations_list = list(dict.fromkeys(
+            value.strip().lower() for value in permutations_list
+            if re.fullmatch(r"[A-Za-z0-9_.-]+", value.strip())
+        ))
 
-    # Generate all potential onlyfans usernames
     def possible_usernames(self):
-        possible_usernames = []
-
-        for permutation in self.permutations_list:
-            possible_usernames.append(self.format.format(
-                permutation = permutation,
-            ))
-        return possible_usernames
+        return ["https://onlyfans.com/" + quote(value, safe="") for value in self.permutations_list]
 
     def search(self):
-        onlyfans_usernames = {
-            "accounts": []
-        }
-        possible_usernames_list = self.possible_usernames()
-
-        for username in possible_usernames_list:
-            try:
-                r = requests.get(username)
-            except requests.ConnectionError:
-                print("failed to connect to onlyfans")
-            
-            # If the account exists
-            if r.status_code == 200:
-                onlyfans_usernames["accounts"].append({"value": username})
-            time.sleep(self.delay)
-        
-        return onlyfans_usernames
+        sites = {key: definition for key, definition in load_definitions("username-url").items()
+                 if definition.get("domain", "").lower() in ("onlyfans.com", "www.onlyfans.com")}
+        findings = scan_definitions(self.permutations_list, sites)
+        return {"accounts": [{"value": item["url"], "status": item["status"]}
+                             for item in findings if item["status"] == "possible_match"],
+                "findings": findings, "checked": sum(item["attempted"] for item in findings)}

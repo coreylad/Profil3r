@@ -25,7 +25,7 @@ class CliTests(unittest.TestCase):
 
     def test_entry_points_forward_arguments(self):
         for entry_point in ("profil3r", "profil3r.py", "-m"):
-            for arguments in (["example@example.com"], ["john", "doe"]):
+            for arguments in (["john"], ["john", "doe"]):
                 with self.subTest(entry_point=entry_point, arguments=arguments):
                     core, output = self.run_cli(entry_point, arguments)
                     core.Core.assert_called_once_with(
@@ -34,6 +34,13 @@ class CliTests(unittest.TestCase):
                     core.Core.return_value.get_permutations.assert_called_once_with()
                     core.Core.return_value.run.assert_called_once_with()
                     self.assertIn("Report saved to", output)
+
+    def test_positional_email_routes_to_email_mode(self):
+        for entry_point in ("profil3r", "profil3r.py", "-m"):
+            with patch("profil3r.suite.main") as suite:
+                core, _ = self.run_cli(entry_point, ["example@example.com"])
+                suite.assert_called_once_with(["--email", "example@example.com"])
+                core.Core.assert_not_called()
 
     def test_no_arguments_prints_help_without_starting_search(self):
         for entry_point in ("profil3r", "profil3r.py", "-m"):

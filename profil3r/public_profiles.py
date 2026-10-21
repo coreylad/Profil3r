@@ -22,6 +22,11 @@ def load_sites(path):
 
 def check_profile(username, name, site, timeout=8):
     """Return evidence-based status; never infer a match from HTTP 200 alone."""
+    if site.get("check_type") == "username-url":
+        from profil3r.site_probe import probe_site
+        return probe_site(username, name, site, timeout)
+    if "@" in username:
+        raise ValueError("Public profile checks require a username, not an email address")
     url = site["url"].replace("{username}", quote(username, safe=""))
     try:
         response = requests.get(
@@ -62,40 +67,7 @@ def scan_public_profiles(usernames, sites, workers=4):
 
 
 def load_mailaccess_username_sites(path=None, include_disabled=False):
-    """Load locally bundled MailAccess username definitions.
-
-    Only public GET/HEAD username URLs are runnable by the basic scanner.
-    Email-existence definitions remain available in the bundled JSON but
-    are not automatically probed.
-    """
-    corpus_path = Path(path) if path else Path(__file__).resolve().parent / "mailaccess_sites.json"
-    with corpus_path.open(encoding="utf-8") as handle:
-        corpus = json.load(handle)
-    result = {}
-    for identifier, definition in corpus["sites"].items():
-        if definition.get("check_type") != "username-url":
-            continue
-        if definition.get("disabled") and not include_disabled:
-            continue
-        if str(definition.get("requestMethod", "GET")).upper() not in ("GET", "HEAD"):
-            continue
-        if definition.get("requestPayload") or definition.get("handler"):
-            continue
-        url = definition.get("uri_check") or definition.get("url") or ""
-        if not url.startswith("https://") or "{username}" not in url:
-            continue
-        positive = definition.get("e_string")
-        negative = definition.get("m_string")
-        if not positive and not negative:
-            continue
-        result[identifier] = {
-            "url": url,
-            "profile_url": definition.get("url", url),
-            "category": definition.get("category", "other"),
-            "adult": "nsfw" in definition.get("tags", []) or "NSFW" in str(definition.get("category", "")),
-            "check_text": [positive] if positive else [],
-            "not_found_text": [negative] if negative else [],
-            "expected_status": definition.get("e_code"),
-            "missing_status": definition.get("m_code"),
-        }
-    return result
+    """Load native schema definitions without dropping message/URL/status rules."""
+    from profil3r.site_probe import load_definitions
+    return {key: definition for key, definition in load_definitions("username-url", path).items()
+            if include_disabled or not definition.get("disabled")}

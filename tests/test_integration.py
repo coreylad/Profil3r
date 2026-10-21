@@ -9,12 +9,12 @@ from profil3r.mailaccess_adapter import investigate_with_mailaccess
 
 
 class IntegrationTests(unittest.TestCase):
-    @patch("profil3r.core.scan_public_profiles")
-    @patch("profil3r.core.load_sites")
+    @patch("profil3r.core.scan_definitions")
+    @patch("profil3r.core.load_definitions")
     def test_standard_run_includes_adult_checks(self, load, scan):
-        load.return_value = {"Example": {"url": "https://example.org/{username}"}}
+        load.return_value = {"Example": {"url": "https://example.org/{username}", "category": "adult"}}
         scan.return_value = [{"site": "Example", "url": "https://example.org/jane",
-                              "status": "unknown", "http_status": 200}]
+                              "status": "unknown", "http_status": 200, "attempted": True}]
         with tempfile.TemporaryDirectory() as directory:
             config = Path(directory) / "config.json"
             config.write_text(json.dumps({"report_path": str(Path(directory) / "{}.json")}))
@@ -25,22 +25,13 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(result["status_counts"]["unknown"], 1)
         self.assertEqual(result["accounts"], [])
 
-    @patch("profil3r.mailaccess_adapter.shutil.which", return_value=None)
-    def test_mailaccess_requires_optional_install(self, _which):
-        with self.assertRaisesRegex(RuntimeError, "not installed"):
-            investigate_with_mailaccess("me@example.org")
-
-    @patch("profil3r.mailaccess_adapter.shutil.which", return_value="/usr/bin/mailaccess")
-    @patch("profil3r.mailaccess_adapter.subprocess.run")
-    def test_mailaccess_reads_upstream_json(self, run, _which):
-        def write_report(command, **kwargs):
-            Path(command[-1]).write_text('{"findings": []}')
-            return Mock(returncode=0)
-        run.side_effect = write_report
+    @patch("profil3r.mailaccess_adapter.scan_definitions")
+    def test_mailaccess_compatibility_uses_native_runner(self, scan):
+        scan.return_value = [{"status": "unknown"}]
         result = investigate_with_mailaccess("me@example.org")
-        self.assertEqual(result["status"], "completed")
-        self.assertEqual(result["report"]["findings"], [])
-        self.assertEqual(run.call_args.args[0][1:3], ["investigate", "me@example.org"])
+        self.assertEqual(result["engine"], "profil3r-native")
+        self.assertEqual(result["report"]["findings"], scan.return_value)
+        self.assertEqual(len(scan.call_args.args[1]), 260)
 
 
 if __name__ == "__main__":
