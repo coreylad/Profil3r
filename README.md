@@ -18,6 +18,32 @@ source .venv/bin/activate
 python -m pip install .
 ```
 
+## Full name scan and adult profiles
+
+The regular `profil3r john doe` scan now includes public adult-profile
+checks automatically alongside the existing social and email modules.
+It records `possible_match`, `not_found`, `unknown` and `error` outcomes
+without treating an HTTP 200 response as evidence of an account.
+The starter adult list still contains only two unverified sites; expanding
+and validating that coverage remains open work.
+
+## MailAccess integration
+
+MailAccess is an independent MIT-licensed project. Profil3r can run its
+upstream email investigation with `--mailaccess`, preserving its JSON report
+instead of inaccurately claiming to reimplement all of its platform rules.
+Install MailAccess separately in the same virtual environment:
+
+```bash
+python -m pip install mailaccess
+profil3r suite --email "me@example.com" --mailaccess
+```
+
+MailAccess advertises a 5,300+ platform corpus, but its default investigation
+runs a bounded set of approximately 700 platforms. This integration **does not
+scan all 5,300+ sites**. Upstream account-existence techniques may differ from
+Profil3r public-profile checks; use only with authorization.
+
 ## Guided menu
 
 ```bash
