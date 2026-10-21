@@ -21,6 +21,10 @@ jobs:
         run: python -m compileall -q profil3r
       - name: Unit tests
         run: python -m unittest discover -s tests -v
+      - name: Installed package import smoke test
+        run: |
+          cd /tmp
+          python -c "import profil3r.modules.email.email; import profil3r.modules.social.facebook; import profil3r.modules.porn.onlyfans; import profil3r.suite"
       - name: CLI help smoke test
         run: |
           profil3r suite --help
