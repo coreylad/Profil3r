@@ -45,7 +45,9 @@ def main(argv=None):
                 results = inspect_usernames(values, args.adult_sites, args.workers)
             else:
                 sites = {key: definition for key, definition in load_definitions("username-url").items() if is_adult(definition)}
-                results = scan_definitions(values, sites, workers=args.workers)
+                from profil3r.progress import ConsoleProgress
+                results = scan_definitions(values, sites, workers=args.workers,
+                                           progress=ConsoleProgress("adult profiles"))
         except (OSError, ValueError) as exc:
             parser.exit(1, "Public profile check: {}\\n".format(exc))
         print(json.dumps(results, indent=2))

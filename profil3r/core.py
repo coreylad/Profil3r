@@ -7,6 +7,7 @@ from pathlib import Path
 
 from profil3r.public_profiles import load_sites, scan_public_profiles
 from profil3r.site_probe import load_definitions, scan_definitions, is_adult
+from profil3r.progress import ConsoleProgress
 import re
 
 from profil3r.modules.email import email
@@ -74,7 +75,8 @@ class Core:
             sites = {key: definition for key, definition in sites.items() if is_adult(definition)}
         print("Scanning {} username definitions for {} handles (including adult sites).".format(
             len(sites), min(len(self.permutations_list), 50)), flush=True)
-        findings = scan_definitions(self.permutations_list[:50], sites, workers=min(self.workers, 16))
+        findings = scan_definitions(self.permutations_list[:50], sites, workers=min(self.workers, 16),
+                                    progress=ConsoleProgress("profiles"))
         return {"accounts": [
             {"value": finding["url"], "status": finding["status"],
              "site": finding["site"], "http_status": finding.get("http_status")}

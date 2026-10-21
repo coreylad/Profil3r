@@ -11,6 +11,7 @@ import re
 from profil3r.public_profiles import load_sites, load_mailaccess_username_sites, scan_public_profiles
 from profil3r.core import check_self_email_exposure
 from profil3r.site_probe import load_definitions, scan_definitions
+from profil3r.progress import ConsoleProgress
 
 
 def inspect_email(value, breach_check=False):
@@ -104,7 +105,8 @@ def inspect_usernames(values, sites_path, workers, timeout=8):
         results = scan_public_profiles(values, sites, workers=workers)
     else:
         print("Scanning 5,100 bundled username definitions, including adult sites; {} workers.".format(workers), flush=True)
-        results = scan_definitions(values, load_definitions("username-url"), workers, timeout)
+        results = scan_definitions(values, load_definitions("username-url"), workers, timeout,
+                                   progress=ConsoleProgress("username"))
     return [{"type": "public_profile", **item} for item in results]
 
 
@@ -112,7 +114,7 @@ def inspect_email_sites(value, workers=4, timeout=8, include_recovery=False):
     print("Scanning 260 bundled email definitions; {} workers.".format(workers), flush=True)
     return [{"type": "email_site", **item} for item in
             scan_definitions([value], load_definitions("email-existence"), workers,
-                             timeout, include_recovery)]
+                             timeout, include_recovery, progress=ConsoleProgress("email"))]
 
 
 def save_report(findings, output, format_name):

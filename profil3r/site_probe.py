@@ -1,5 +1,5 @@
 """Native MailAccess-schema probes; no upstream program is required."""
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from html import unescape
 from html.parser import HTMLParser
 import json
@@ -225,7 +225,7 @@ def probe_site(value, identifier, definition, timeout=8, include_recovery=False)
         return {**result, "status": "unknown", "detail": str(exc)}
 
 
-def scan_definitions(values, definitions, workers=4, timeout=8, include_recovery=False):
+def scan_definitions(values, definitions, workers=4, timeout=8, include_recovery=False, progress=None):
     if not 1 <= workers <= 16:
         raise ValueError("workers must be between 1 and 16")
     if not 0 < timeout <= 120:
@@ -235,8 +235,20 @@ def scan_definitions(values, definitions, workers=4, timeout=8, include_recovery
         raise ValueError("Username checks require handles, not email addresses")
     if len(values) > 50:
         raise ValueError("At most 50 identifiers per scan")
+    total = len(values) * len(definitions)
+    findings = []
+    if progress:
+        progress(0, total, None)
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        pending = [executor.submit(probe_site, value, key, definition, timeout, include_recovery)
-                   for value in values for key, definition in definitions.items()]
-        findings = [future.result() for future in as_completed(pending)]
+        pending = {executor.submit(probe_site, value, key, definition, timeout, include_recovery)
+                   for value in values for key, definition in definitions.items()}
+        while pending:
+            done, pending = wait(pending, timeout=5, return_when=FIRST_COMPLETED)
+            if not done and progress:
+                progress(len(findings), total, None)
+            for future in done:
+                finding = future.result()
+                findings.append(finding)
+                if progress:
+                    progress(len(findings), total, finding)
     return sorted(findings, key=lambda item: (item["value"], item["site"]))

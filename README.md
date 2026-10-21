@@ -89,6 +89,11 @@ launches the upstream program. `--timeout` sets the per-request timeout (default
 8 seconds, maximum 120); `--workers` accepts 1–16 concurrent probes. A scan of thousands
 of sites can take a long time. There is no implicit 334-site or 700-site limit.
 
+Scans print live progress as each definition finishes: completed/total, percentage,
+elapsed seconds, site, status, HTTP code and reason. A waiting message appears every
+five seconds without a completion, and a final summary separates attempted requests
+from skipped definitions. Output is flushed immediately, including when redirected.
+
 The name scan runs at most 50 generated handles and reports the number of omitted
 permutations. Explicit username scans accept at most 50 distinct handles. Email addresses
 are rejected in username mode; the tool never assumes an email's local part is a handle.
