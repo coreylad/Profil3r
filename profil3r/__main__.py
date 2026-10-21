@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 
 from profil3r.core import Core, check_self_email_exposure
+from profil3r.public_profiles import load_sites, scan_public_profiles
+import json
 
 
 def main(argv=None):
@@ -13,9 +15,21 @@ def main(argv=None):
     parser.add_argument("--format", choices=["json", "csv"], default="json")
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--self-email", metavar="ADDRESS", help="Check your own email for known adult-site breach exposure")
+    parser.add_argument("--adult-usernames", metavar="NAMES", help="Comma-separated usernames to check on public adult profiles")
+    parser.add_argument("--adult-sites", type=Path, default=Path(__file__).resolve().parent.parent / "public_adult_sites.json")
     args = parser.parse_args(argv)
     if args.workers < 1:
         parser.error("--workers must be at least 1")
+    if args.adult_usernames:
+        if args.names or args.self_email:
+            parser.error("--adult-usernames cannot be combined with other scan modes")
+        try:
+            sites = load_sites(args.adult_sites)
+            results = scan_public_profiles(args.adult_usernames.split(","), sites, workers=args.workers)
+        except (OSError, ValueError) as exc:
+            parser.exit(1, "Public profile check: {}\\n".format(exc))
+        print(json.dumps(results, indent=2))
+        return
     if args.self_email:
         if args.names:
             parser.error("--self-email cannot be combined with name searches")
