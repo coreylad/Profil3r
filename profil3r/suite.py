@@ -14,6 +14,7 @@ import re
 
 from profil3r.public_profiles import load_sites, scan_public_profiles
 from profil3r.core import check_self_email_exposure
+from profil3r.mailaccess_adapter import investigate_with_mailaccess
 
 
 def inspect_email(value, breach_check=False):
@@ -92,7 +93,8 @@ def save_report(findings, output, format_name):
         with path.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
             writer.writeheader()
-            writer.writerows(findings)
+            writer.writerows({key: (json.dumps(val) if isinstance(val, (dict, list)) else val)
+                              for key, val in item.items()} for item in findings)
     else:
         raise ValueError("Unsupported report format")
     return path
@@ -128,6 +130,7 @@ def main(argv=None):
     target.add_argument("--phone", help="Phone number to parse and inspect")
     target.add_argument("--interactive", action="store_true", help="Step-by-step guided menu")
     parser.add_argument("--region", default="US", help="Default region for national phone numbers (e.g. GB, US)")
+    parser.add_argument("--mailaccess", action="store_true", help="Run optional upstream MailAccess email investigation (install separately)")
     parser.add_argument("--breaches", action="store_true", help="Opt-in HIBP adult breach lookup for your own email; needs HIBP_API_KEY")
     parser.add_argument("--sites", type=Path, default=Path(__file__).resolve().parent / "public_adult_sites.json")
     parser.add_argument("--workers", type=int, default=4)
@@ -136,8 +139,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if not 1 <= args.workers <= 16:
         parser.error("--workers must be 1 to 16")
-    if args.breaches and not args.email:
-        parser.error("--breaches requires --email")
+    if (args.breaches or args.mailaccess) and not args.email:
+        parser.error("--breaches and --mailaccess require --email")
     try:
         if args.interactive or not any((args.email, args.username, args.phone)):
             mode, value, breach = wizard()
@@ -147,6 +150,8 @@ def main(argv=None):
             breach = args.breaches
         if mode == "email":
             findings = inspect_email(value, breach)
+            if args.mailaccess:
+                findings.append(investigate_with_mailaccess(value))
         elif mode == "username":
             findings = inspect_usernames(value.split(","), args.sites, args.workers)
         else:
