@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 import re
 
-from profil3r.public_profiles import load_sites, scan_public_profiles
+from profil3r.public_profiles import load_sites, load_mailaccess_username_sites, scan_public_profiles
 from profil3r.core import check_self_email_exposure
 from profil3r.mailaccess_adapter import investigate_with_mailaccess
 
@@ -101,7 +101,7 @@ def inspect_phone(value, region="US"):
 
 
 def inspect_usernames(values, sites_path, workers):
-    sites = load_sites(sites_path)
+    sites = load_mailaccess_username_sites() if sites_path is None else load_sites(sites_path)
     return [{"type": "public_profile", **item} for item in
             scan_public_profiles(values, sites, workers=workers)]
 
@@ -160,7 +160,7 @@ def main(argv=None):
     parser.add_argument("--region", default="US", help="Default region for national phone numbers (e.g. GB, US)")
     parser.add_argument("--mailaccess", action="store_true", help="Run optional upstream MailAccess email investigation (install separately)")
     parser.add_argument("--breaches", action="store_true", help="Opt-in HIBP adult breach lookup for your own email; needs HIBP_API_KEY")
-    parser.add_argument("--sites", type=Path, default=Path(__file__).resolve().parent / "public_adult_sites.json")
+    parser.add_argument("--sites", type=Path, help="Optional custom site definitions; defaults to bundled MailAccess public username corpus")
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--format", choices=["json", "csv"], default="json")
     parser.add_argument("--output", type=Path, help="Report path; defaults to reports/osint.<format>")
