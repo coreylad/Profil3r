@@ -4,6 +4,8 @@ from itertools import combinations, permutations
 import csv
 import json
 from pathlib import Path
+
+from profil3r.public_profiles import load_sites, scan_public_profiles
 import re
 
 from profil3r.modules.email import email
@@ -27,6 +29,7 @@ class Core:
             {"name": "tiktok", "method": self.tiktok},
             {"name": "instagram", "method": self.instagram},
             {"name": "onlyfans", "method": self.onlyfans},
+            {"name": "adult_public_profiles", "method": self.adult_public_profiles},
         ]
 
     def config(self):
@@ -66,9 +69,28 @@ class Core:
     def onlyfans(self):
         return onlyfans.Onlyfans(self.CONFIG, self.permutations_list).search()
 
+    def adult_public_profiles(self):
+        """Include public adult-profile checks in every standard name scan."""
+        sites_path = Path(__file__).resolve().parent / "public_adult_sites.json"
+        sites = load_sites(sites_path)
+        usernames = self.permutations_list[:50]
+        findings = scan_public_profiles(usernames, sites, workers=min(self.workers, 8))
+        return {"accounts": [
+            {"value": finding["url"], "status": finding["status"],
+             "site": finding["site"], "http_status": finding.get("http_status")}
+            for finding in findings if finding["status"] == "possible_match"
+        ], "checked": len(findings), "status_counts": {
+            status: sum(item["status"] == status for item in findings)
+            for status in ("possible_match", "not_found", "unknown", "error")
+        }, "findings": findings}
+
     def print_results(self, element):
         accounts = self.results.get(element, {}).get("accounts", [])
         print("\n{}: {} results".format(element.upper(), len(accounts)))
+        if element == "adult_public_profiles":
+            print("  {} checks; statuses: {}".format(
+                self.results[element].get("checked", 0),
+                self.results[element].get("status_counts", {})))
         for account in accounts:
             label = account["value"]
             if element == "email":
