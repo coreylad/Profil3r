@@ -22,6 +22,11 @@ def load_sites(path):
 
 def check_profile(username, name, site, timeout=8):
     """Return evidence-based status; never infer a match from HTTP 200 alone."""
+    if site.get("check_type") == "username-url":
+        from profil3r.site_probe import probe_site
+        return probe_site(username, name, site, timeout)
+    if "@" in username:
+        raise ValueError("Public profile checks require a username, not an email address")
     url = site["url"].replace("{username}", quote(username, safe=""))
     try:
         response = requests.get(
@@ -30,7 +35,7 @@ def check_profile(username, name, site, timeout=8):
         )
     except requests.RequestException as exc:
         return {"site": name, "url": url, "status": "error", "detail": type(exc).__name__}
-    if response.status_code == 404:
+    if response.status_code == 404 or (site.get("missing_status") is not None and response.status_code == site["missing_status"] and site.get("expected_status") != response.status_code):
         status = "not_found"
     elif response.status_code != 200:
         status = "unknown"
@@ -40,7 +45,7 @@ def check_profile(username, name, site, timeout=8):
         negative = [term for term in site.get("not_found_text", []) if term.lower() in body]
         if negative:
             status = "not_found"
-        elif positive:
+        elif positive and (site.get("expected_status") is None or response.status_code == site["expected_status"]):
             status = "possible_match"
         else:
             status = "unknown"
@@ -59,3 +64,10 @@ def scan_public_profiles(usernames, sites, workers=4):
             for username in usernames for name, site in sites.items()
         ]
         return [future.result() for future in as_completed(futures)]
+
+
+def load_mailaccess_username_sites(path=None, include_disabled=False):
+    """Load native schema definitions without dropping message/URL/status rules."""
+    from profil3r.site_probe import load_definitions
+    return {key: definition for key, definition in load_definitions("username-url", path).items()
+            if include_disabled or not definition.get("disabled")}

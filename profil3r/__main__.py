@@ -12,17 +12,23 @@ import sys
 def main(argv=None):
     if argv is None:
         argv = sys.argv[1:]
+    # A positional email is an email scan, never a public-profile handle.
+    if len(argv) == 1 and "@" in argv[0] and not argv[0].startswith("-"):
+        from profil3r.suite import main as suite_main
+        return suite_main(["--email", argv[0]])
     if argv and argv[0] in ("suite", "wizard"):
         from profil3r.suite import main as suite_main
         return suite_main(["--interactive"] + argv[1:] if argv[0] == "wizard" else argv[1:])
     parser = argparse.ArgumentParser(description="Public-profile discovery and opt-in email breach checks")
     parser.add_argument("names", nargs="*", help="Name components to search")
-    parser.add_argument("--config", type=Path, default=Path(__file__).resolve().parent.parent / "config.json")
+    source_config = Path(__file__).resolve().parent.parent / "config.json"
+    default_config = source_config if source_config.is_file() else Path(__file__).with_name("default_config.json")
+    parser.add_argument("--config", type=Path, default=default_config)
     parser.add_argument("--format", choices=["json", "csv"], default="json")
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--self-email", metavar="ADDRESS", help="Check your own email for known adult-site breach exposure")
     parser.add_argument("--adult-usernames", metavar="NAMES", help="Comma-separated usernames to check on public adult profiles")
-    parser.add_argument("--adult-sites", type=Path, default=Path(__file__).resolve().parent.parent / "public_adult_sites.json")
+    parser.add_argument("--adult-sites", type=Path, default=None)
     args = parser.parse_args(argv)
     if args.workers < 1:
         parser.error("--workers must be at least 1")
@@ -30,8 +36,16 @@ def main(argv=None):
         if args.names or args.self_email:
             parser.error("--adult-usernames cannot be combined with other scan modes")
         try:
-            sites = load_sites(args.adult_sites)
-            results = scan_public_profiles(args.adult_usernames.split(","), sites, workers=args.workers)
+            from profil3r.suite import inspect_usernames
+            from profil3r.site_probe import is_adult, load_definitions, scan_definitions
+            values = args.adult_usernames.split(",")
+            if any("@" in value for value in values):
+                raise ValueError("Provide OnlyFans/public-profile usernames, not email addresses")
+            if args.adult_sites:
+                results = inspect_usernames(values, args.adult_sites, args.workers)
+            else:
+                sites = {key: definition for key, definition in load_definitions("username-url").items() if is_adult(definition)}
+                results = scan_definitions(values, sites, workers=args.workers)
         except (OSError, ValueError) as exc:
             parser.exit(1, "Public profile check: {}\\n".format(exc))
         print(json.dumps(results, indent=2))

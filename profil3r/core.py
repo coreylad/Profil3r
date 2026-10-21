@@ -4,6 +4,9 @@ from itertools import combinations, permutations
 import csv
 import json
 from pathlib import Path
+
+from profil3r.public_profiles import load_sites, scan_public_profiles
+from profil3r.site_probe import load_definitions, scan_definitions, is_adult
 import re
 
 from profil3r.modules.email import email
@@ -22,11 +25,7 @@ class Core:
         self.workers = max(1, int(workers))
         self.modules = [
             {"name": "email", "method": self.email},
-            {"name": "facebook", "method": self.facebook},
-            {"name": "twitter", "method": self.twitter},
-            {"name": "tiktok", "method": self.tiktok},
-            {"name": "instagram", "method": self.instagram},
-            {"name": "onlyfans", "method": self.onlyfans},
+            {"name": "public_profiles", "method": self.public_profiles},
         ]
 
     def config(self):
@@ -35,6 +34,8 @@ class Core:
     def get_permutations(self):
         tokens = [str(item).strip().lower() for item in self.items if str(item).strip()]
         tokens = list(dict.fromkeys(tokens))
+        if any("@" in token for token in tokens):
+            raise ValueError("Name scans require names/handles, not email addresses; use profil3r suite --email")
         # Bound input size to avoid factorial memory exhaustion.
         if len(tokens) > 5:
             raise ValueError("At most five name components are supported")
@@ -66,9 +67,35 @@ class Core:
     def onlyfans(self):
         return onlyfans.Onlyfans(self.CONFIG, self.permutations_list).search()
 
+    def public_profiles(self, adult_only=False):
+        """Run every bundled username definition, including adult platforms."""
+        sites = load_definitions("username-url")
+        if adult_only:
+            sites = {key: definition for key, definition in sites.items() if is_adult(definition)}
+        print("Scanning {} username definitions for {} handles (including adult sites).".format(
+            len(sites), min(len(self.permutations_list), 50)), flush=True)
+        findings = scan_definitions(self.permutations_list[:50], sites, workers=min(self.workers, 16))
+        return {"accounts": [
+            {"value": finding["url"], "status": finding["status"],
+             "site": finding["site"], "http_status": finding.get("http_status")}
+            for finding in findings if finding["status"] == "possible_match"
+        ], "checked": sum(item["attempted"] for item in findings),
+            "definitions": len(sites), "username_count": min(len(self.permutations_list), 50),
+            "omitted_permutations": max(0, len(self.permutations_list) - 50),
+            "status_counts": {status: sum(item["status"] == status for item in findings)
+                              for status in ("possible_match", "not_found", "unknown", "error", "skipped", "rate_limited")},
+            "findings": findings}
+
+    def adult_public_profiles(self):
+        return self.public_profiles(adult_only=True)
+
     def print_results(self, element):
         accounts = self.results.get(element, {}).get("accounts", [])
         print("\n{}: {} results".format(element.upper(), len(accounts)))
+        if element in ("adult_public_profiles", "public_profiles"):
+            print("  {} checks; statuses: {}".format(
+                self.results[element].get("checked", 0),
+                self.results[element].get("status_counts", {})))
         for account in accounts:
             label = account["value"]
             if element == "email":
@@ -84,11 +111,13 @@ class Core:
         path.parent.mkdir(parents=True, exist_ok=True)
         if self.report_format == "csv":
             with path.open("w", newline="", encoding="utf-8") as handle:
-                writer = csv.DictWriter(handle, fieldnames=["platform", "value", "breached"])
+                fields = ["platform", "value", "breached", "site", "url", "status", "detail",
+                          "category", "adult", "attempted", "http_status"]
+                writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                 writer.writeheader()
                 for platform, payload in self.results.items():
-                    for account in payload.get("accounts", []):
-                        writer.writerow({"platform": platform, "value": account.get("value", ""), "breached": account.get("breached", "")})
+                    for finding in payload.get("findings", payload.get("accounts", [])):
+                        writer.writerow({"platform": platform, **finding})
         else:
             with path.open("w", encoding="utf-8") as handle:
                 json.dump(self.results, handle, indent=2)
