@@ -52,7 +52,8 @@ def main(argv=None):
             print("{} | {} | {}".format(match["name"], match["breach_date"], match["domain"]))
         return
     if not args.names:
-        parser.error("Provide name components or use --self-email")
+        parser.print_help()
+        return
     try:
         scanner = Core(args.config, args.names, report_format=args.format, workers=args.workers)
         scanner.get_permutations()
