@@ -28,17 +28,20 @@ class CliTests(unittest.TestCase):
             for arguments in (["example@example.com"], ["john", "doe"]):
                 with self.subTest(entry_point=entry_point, arguments=arguments):
                     core, output = self.run_cli(entry_point, arguments)
-                    core.Core.assert_called_once_with("./config.json", arguments)
+                    core.Core.assert_called_once_with(
+                        ROOT / "config.json", arguments, report_format="json", workers=4
+                    )
                     core.Core.return_value.get_permutations.assert_called_once_with()
                     core.Core.return_value.run.assert_called_once_with()
-                    self.assertIn("v1.0.4", output)
+                    self.assertIn("Report saved to", output)
 
-    def test_no_arguments_prints_usage_without_starting_search(self):
+    def test_no_arguments_prints_help_without_starting_search(self):
         for entry_point in ("profil3r", "profil3r.py", "-m"):
             with self.subTest(entry_point=entry_point):
                 core, output = self.run_cli(entry_point, [])
                 core.Core.assert_not_called()
-                self.assertIn("Usage : python3 profil3r <arguments>", output)
+                self.assertIn("usage:", output.lower())
+                self.assertIn("--self-email", output)
 
     def test_directory_entry_point_adds_package_parent_to_search_path(self):
         with patch.object(sys, "path", [
@@ -47,6 +50,16 @@ class CliTests(unittest.TestCase):
         ]):
             self.run_cli("profil3r", [])
             self.assertEqual(sys.path[0], str(ROOT))
+
+    def test_custom_options_forwarded(self):
+        for entry_point in ("profil3r", "profil3r.py", "-m"):
+            with self.subTest(entry_point=entry_point):
+                core, _ = self.run_cli(
+                    entry_point, ["--workers", "2", "--format", "csv", "john"]
+                )
+                core.Core.assert_called_once_with(
+                    ROOT / "config.json", ["john"], report_format="csv", workers=2
+                )
 
 
 if __name__ == "__main__":
