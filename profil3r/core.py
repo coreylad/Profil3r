@@ -8,6 +8,7 @@ from pathlib import Path
 from profil3r.public_profiles import load_sites, scan_public_profiles
 from profil3r.site_probe import load_definitions, scan_definitions, is_adult
 from profil3r.progress import ConsoleProgress
+from profil3r.reporting import annotate_findings, print_findings
 import re
 
 from profil3r.modules.email import email
@@ -77,6 +78,7 @@ class Core:
             len(sites), min(len(self.permutations_list), 50)), flush=True)
         findings = scan_definitions(self.permutations_list[:50], sites, workers=min(self.workers, 16),
                                     progress=ConsoleProgress("profiles"))
+        findings = annotate_findings(findings)
         return {"accounts": [
             {"value": finding["url"], "status": finding["status"],
              "site": finding["site"], "http_status": finding.get("http_status")}
@@ -98,6 +100,8 @@ class Core:
             print("  {} checks; statuses: {}".format(
                 self.results[element].get("checked", 0),
                 self.results[element].get("status_counts", {})))
+            print_findings(self.results[element].get("findings", []))
+            return
         for account in accounts:
             label = account["value"]
             if element == "email":
@@ -114,7 +118,7 @@ class Core:
         if self.report_format == "csv":
             with path.open("w", newline="", encoding="utf-8") as handle:
                 fields = ["platform", "value", "breached", "site", "url", "status", "detail",
-                          "category", "adult", "attempted", "http_status"]
+                          "category", "adult", "section", "category_note", "attempted", "http_status"]
                 writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                 writer.writeheader()
                 for platform, payload in self.results.items():

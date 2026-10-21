@@ -12,6 +12,7 @@ from profil3r.public_profiles import load_sites, load_mailaccess_username_sites,
 from profil3r.core import check_self_email_exposure
 from profil3r.site_probe import load_definitions, scan_definitions
 from profil3r.progress import ConsoleProgress
+from profil3r.reporting import annotate_findings, print_findings, SECTIONS
 
 
 def inspect_email(value, breach_check=False):
@@ -118,17 +119,20 @@ def inspect_email_sites(value, workers=4, timeout=8, include_recovery=False):
 
 
 def save_report(findings, output, format_name):
+    findings = annotate_findings(findings)
     path = Path(output)
     path.parent.mkdir(parents=True, exist_ok=True)
     report = {"generated_at": datetime.now(timezone.utc).isoformat(),
               "disclaimer": "Possible matches are not verified identities or private account membership.",
-              "findings": findings}
+              "findings": findings,
+              "section_counts": {key: sum(row["section"] == key for row in findings)
+                                 for key, _ in SECTIONS}}
     if format_name == "json":
         path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     elif format_name == "csv":
         fields = ["type", "value", "site", "url", "status", "detail", "e164",
                   "region", "domain", "name", "breach_date", "source", "note",
-                  "check_type", "category", "adult", "attempted", "http_status"]
+                  "check_type", "category", "adult", "section", "category_note", "attempted", "http_status"]
         with path.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
             writer.writeheader()
@@ -204,10 +208,7 @@ def main(argv=None):
         else:
             findings = inspect_domain(value)
         print("\nResults ({} findings):".format(len(findings)))
-        for item in findings:
-            print("  {}: {} ({})".format(item.get("type", "finding"),
-                                        item.get("site", item.get("value", "")),
-                                        item.get("status", "unknown")))
+        print_findings(findings)
         path = save_report(findings, args.output or Path("reports/osint." + args.format), args.format)
         print("\nSaved report: {}".format(path))
         print("Reminder: a possible public match does not confirm account ownership.")

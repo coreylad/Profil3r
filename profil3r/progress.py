@@ -24,6 +24,8 @@ class ConsoleProgress:
             self.counts[status] += 1
             self.attempted += bool(finding.get("attempted"))
             site = finding.get("name") or finding.get("site", "unknown site")
+            if finding.get("adult"):
+                site = "[PORN/ADULT] " + site
             detail = finding.get("detail", "")
             http = " HTTP {}".format(finding["http_status"]) if finding.get("http_status") is not None else ""
             # Keep one result per line even when a provider returns control characters.

@@ -94,6 +94,11 @@ elapsed seconds, site, status, HTTP code and reason. A waiting message appears e
 five seconds without a completion, and a final summary separates attempted requests
 from skipped definitions. Output is flushed immediately, including when redirected.
 
+Final results have separate **General** and **Porn / adult sites** sections. Adult-site
+rows carry a `[PORN/ADULT]` label in live output. JSON and CSV retain the `adult`,
+`section` and `category_note` fields; JSON also contains section counts. These labels
+describe the website category and do not establish account ownership.
+
 The name scan runs at most 50 generated handles and reports the number of omitted
 permutations. Explicit username scans accept at most 50 distinct handles. Email addresses
 are rejected in username mode; the tool never assumes an email's local part is a handle.
