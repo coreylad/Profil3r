@@ -1,0 +1,19 @@
+{
+  "websites": {
+    "Pornhub": {
+      "url": "https://www.pornhub.com/users/{username}",
+      "check_text": [],
+      "not_found_text": [
+        "page not found",
+        "user not found"
+      ]
+    },
+    "OnlyFans": {
+      "url": "https://onlyfans.com/{username}",
+      "check_text": [],
+      "not_found_text": [
+        "page not found"
+      ]
+    }
+  }
+}
